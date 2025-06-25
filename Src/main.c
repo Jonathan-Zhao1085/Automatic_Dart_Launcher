@@ -24,6 +24,9 @@
 #include "serial_reader.h"
 #include "stepper_motor.h"
 #include "auto_move.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -63,10 +66,30 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+int stop = 0;
+
 void microDelay(uint16_t delay, TIM_HandleTypeDef *timer){
 	  __HAL_TIM_SET_COUNTER(timer, 0);
 	  while (__HAL_TIM_GET_COUNTER(timer) < delay);
  }
+
+void run(void *pvParameters){
+	while(stop != 1){
+		auto_move(serial_read());
+		vTaskDelay(pdMS_TO_TICKS(700));
+	}
+}
+
+#define stop_port GPIOB
+#define stop_pin GPIO_PIN_1
+void initiate_stop(void * pvParamters){
+	while(stop != 1){
+		if(HAL_GPIO_ReadPin(stop_port, stop_pin) == GPIO_PIN_SET){
+			stop = 1;
+		}
+	}
+}
 
 /* USER CODE END 0 */
 
@@ -78,6 +101,10 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	TaskHandle_t ActiveSystem = NULL;
+	TaskHandle_t StopSystem = NULL;
+	xTaskCreate(run, "Active System", 700, NULL, 1, &ActiveSystem);
+	xTaskCreate(initiate_stop, "Stop System", 100, NULL, &StopSystem);
 
   /* USER CODE END 1 */
 
@@ -110,11 +137,11 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  vTaskStartScheduler();
+
   while (1)
   {
-	  auto_move(serial_read());
-	  HAL_Delay(700);
-
 
     /* USER CODE END WHILE */
 
