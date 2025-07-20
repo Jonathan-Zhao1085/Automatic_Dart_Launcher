@@ -3,8 +3,8 @@
 
 #include "stepper_motor.h"
 
-#define CPort GPIOB
-#define CPin GPIO_PIN_1
+#define CPort GPIOC
+#define CPin GPIO_PIN_0
 
 void auto_move(char command);
 

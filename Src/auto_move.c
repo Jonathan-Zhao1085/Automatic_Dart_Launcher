@@ -3,6 +3,7 @@
 
 void confirmation(){
 	while(HAL_GPIO_ReadPin(CPort, CPin) == GPIO_PIN_RESET){}
+	while(HAL_GPIO_ReadPin(CPort, CPin) == GPIO_PIN_SET){}
 	shoot();
 }
 
@@ -26,7 +27,7 @@ void auto_move(char command){
 
 	else if(command == 'C'){
 			HAL_Delay(1000);
-			if(commmand == 'C'){
+			if(command == 'C'){
 				confirmation();
 			}
 		}

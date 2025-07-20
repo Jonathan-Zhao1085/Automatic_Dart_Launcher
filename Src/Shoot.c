@@ -6,6 +6,6 @@
  */
 
 
-shoot(){
+void shoot(){
 	//do the shooting
 }
