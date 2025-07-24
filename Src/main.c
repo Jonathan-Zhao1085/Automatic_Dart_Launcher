@@ -80,28 +80,23 @@ void StartDefaultTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-int stop = 0;
+volatile int stop = 0;
 
 void microDelay(uint16_t delay, TIM_HandleTypeDef *timer){
 	  __HAL_TIM_SET_COUNTER(timer, 0);
 	  while (__HAL_TIM_GET_COUNTER(timer) < delay);
  }
 
-void run(void *pvParameters){
-	while(stop != 1){
+void run(){
 		auto_move(serial_read());
-		vTaskDelay(pdMS_TO_TICKS(700));
-	}
+		HAl_Delay(700);
 }
 
-#define stop_port GPIOB
-#define stop_pin GPIO_PIN_1
-void initiate_stop(void * pvParamters){
-	while(stop != 1){
-		if(HAL_GPIO_ReadPin(stop_port, stop_pin) == GPIO_PIN_SET){
-			stop = 1;
-		}
-	}
+//#define stop_port GPIOB
+//#define stop_pin GPIO_PIN_0
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	stop = (stop = 1) ? 0 : 1;
 }
 
 /* USER CODE END 0 */
@@ -118,11 +113,6 @@ int main(void)
 	#define LaserPort GPIOC
 	#define LaserPin GPIO_PIN_2
 	HAL_GPIO_WritePin(LaserPort, LaserPin, GPIO_PIN_SET);
-
-	TaskHandle_t ActiveSystem = NULL;
-	TaskHandle_t StopSystem = NULL;
-	xTaskCreate(run, "Active System", 700, NULL, 1, &ActiveSystem);
-	xTaskCreate(initiate_stop, "Stop System", 100, NULL, 1, &StopSystem);
 
   /* USER CODE END 1 */
 
@@ -154,50 +144,13 @@ int main(void)
 
   /* USER CODE END 2 */
 
-  /* Init scheduler */
-  osKernelInitialize();
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
-
-  /* Start scheduler */
-  osKernelStart();
-
-  /* We should never get here as control is now taken by the scheduler */
-
-  /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  vTaskStartScheduler();
 
-  while (1)
+  while (stop != 1)
   {
 
+	run();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -477,6 +430,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PB0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pins : PB12 PB13 PB14 PB15 */
   GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -489,6 +448,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(Ultrasonic_Echo_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
