@@ -1,7 +1,7 @@
 Description:
   - Tools: C, Python, OpenCV, RTOS
   - Function: Automatic dart shooter, able to autonomously aim and shoot at a dartboard
-  - Hardware: STM32, motors, ultrasonic sensor, hall effect sensors, transistors, resistors, laser emitter
+  - Hardware: STM32, stepper motor, servo motor, ultrasonic sensor, A4988 stepper motor driver, laser emitter
 
 Machine Vision for Dartboard Recognition using Python/OpenCV:
 <img width="1912" height="929" alt="Image" src="https://github.com/user-attachments/assets/ee05d1f0-8845-4fe7-b031-b66c7d15296e" />
