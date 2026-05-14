@@ -6,8 +6,5 @@ Description:
 Machine Vision for Dartboard Recognition using Python/OpenCV:
 <img width="1912" height="929" alt="Image" src="https://github.com/user-attachments/assets/ee05d1f0-8845-4fe7-b031-b66c7d15296e" />
 
-Wiring Prototype:
-![Image](https://github.com/user-attachments/assets/c334902c-6651-4071-b29c-af762dad979a)
-
-
-(Mechanical body still in development, more info to come soon!)
+Physical Launcher:
+<img width="1215" height="911" alt="image" src="https://github.com/user-attachments/assets/568c415e-ac81-4039-9c64-f5b39e0ca3be" />
