@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -18,16 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "serial_reader.h"
-#include "stepper_motor.h"
-#include "auto_move.h"
-
-//#include "cmsis_os.h"
-//#include "FreeRTOS.h"
-//#include "task.h"
+#include "serial_receive.h"
+#include "horizontal.h"
+#include "vertical.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +47,27 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for serial_receive */
+osThreadId_t serial_receiveHandle;
+const osThreadAttr_t serial_receive_attributes = {
+  .name = "serial_receive",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for horizontal_move */
+osThreadId_t horizontal_moveHandle;
+const osThreadAttr_t horizontal_move_attributes = {
+  .name = "horizontal_move",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for vertical_move */
+osThreadId_t vertical_moveHandle;
+const osThreadAttr_t vertical_move_attributes = {
+  .name = "vertical_move",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -59,31 +77,16 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
+void start_serial_receive(void *argument);
+void start_horizontal_move(void *argument);
+void start_vertical_move(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-volatile int stop = 0;
-
-void microDelay(uint16_t delay, TIM_HandleTypeDef *timer){
-	  __HAL_TIM_SET_COUNTER(timer, 0);
-	  while (__HAL_TIM_GET_COUNTER(timer) < delay);
- }
-
-void run(){
-		auto_move(serial_read());
-		HAL_Delay(700);
-}
-
-//#define stop_port GPIOB
-//#define stop_pin GPIO_PIN_0
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	stop = (stop = 1) ? 0 : 1;
-}
 
 /* USER CODE END 0 */
 
@@ -95,10 +98,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
-	#define LaserPort GPIOC
-	#define LaserPin GPIO_PIN_2
-	HAL_GPIO_WritePin(LaserPort, LaserPin, GPIO_PIN_SET);
 
   /* USER CODE END 1 */
 
@@ -123,18 +122,62 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start(&htim1);  // Start Timer 1
+
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+
+  set_angle(160); //set initial angle to 160 degrees (lowest position)
+  HAL_Delay(1000); //wait for 1 second to ensure the servo is in position before receiving data from laptop
+
 
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of serial_receive */
+  serial_receiveHandle = osThreadNew(start_serial_receive, NULL, &serial_receive_attributes);
+
+  /* creation of horizontal_move */
+  horizontal_moveHandle = osThreadNew(start_horizontal_move, NULL, &horizontal_move_attributes);
+
+  /* creation of vertical_move */
+  vertical_moveHandle = osThreadNew(start_vertical_move, NULL, &vertical_move_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-
-  while (stop != 1)
+  while (1)
   {
-
-	run();
+      // Tasks are running, this loop is not reached
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -203,14 +246,16 @@ static void MX_TIM1_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 83;
+  htim1.Init.Prescaler = 27;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 60000;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -223,15 +268,42 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
 
 }
 
@@ -287,14 +359,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, Transistor_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
-                          |GPIO_PIN_9, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LD2_Pin|Ultrasonic_Trig_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, stepper_step_Pin|stepper_dir_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -302,50 +370,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Button_Input_Pin */
-  GPIO_InitStruct.Pin = Button_Input_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(Button_Input_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : Transistor_Pin PC6 PC7 PC8
-                           PC9 */
-  GPIO_InitStruct.Pin = Transistor_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
-                          |GPIO_PIN_9;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : LD2_Pin Ultrasonic_Trig_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin|Ultrasonic_Trig_Pin;
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB12 PB13 PB14 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  /*Configure GPIO pins : stepper_step_Pin stepper_dir_Pin */
+  GPIO_InitStruct.Pin = stepper_step_Pin|stepper_dir_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : Ultrasonic_Echo_Pin */
-  GPIO_InitStruct.Pin = Ultrasonic_Echo_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(Ultrasonic_Echo_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -356,26 +393,61 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
+/* USER CODE BEGIN Header_start_serial_receive */
 /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM3 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
+  * @brief  Function implementing the serial_receive thread.
+  * @param  argument: Not used
   * @retval None
   */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+/* USER CODE END Header_start_serial_receive */
+void start_serial_receive(void *argument)
 {
-  /* USER CODE BEGIN Callback 0 */
-
-  /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM3)
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
   {
-    HAL_IncTick();
+    serial_receive();
+    osDelay(200);
   }
-  /* USER CODE BEGIN Callback 1 */
+  /* USER CODE END 5 */
+}
 
-  /* USER CODE END Callback 1 */
+/* USER CODE BEGIN Header_start_horizontal_move */
+/**
+* @brief Function implementing the horizontal_move thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_start_horizontal_move */
+void start_horizontal_move(void *argument)
+{
+  /* USER CODE BEGIN start_horizontal_move */
+  /* Infinite loop */
+  for(;;)
+  {
+    horizontal_move();
+    osDelay(200);
+  }
+  /* USER CODE END start_horizontal_move */
+}
+
+/* USER CODE BEGIN Header_start_vertical_move */
+/**
+* @brief Function implementing the vertical_move thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_start_vertical_move */
+void start_vertical_move(void *argument)
+{
+  /* USER CODE BEGIN start_vertical_move */
+  /* Infinite loop */
+  for(;;)
+  {
+    vertical_move();
+    osDelay(200);
+  }
+  /* USER CODE END start_vertical_move */
 }
 
 /**
