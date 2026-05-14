@@ -8,3 +8,5 @@ Machine Vision for Dartboard Recognition using Python/OpenCV:
 
 Physical Launcher:
 <img width="1215" height="911" alt="image" src="https://github.com/user-attachments/assets/568c415e-ac81-4039-9c64-f5b39e0ca3be" />
+
+<img width="683" height="911" alt="image" src="https://github.com/user-attachments/assets/5bb891e1-f380-4393-8608-f896a442c07b" />
